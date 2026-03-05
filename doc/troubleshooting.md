@@ -51,6 +51,15 @@ Traces can be saved to a file when the `trace_to_file` option is enabled.
 The target folder is specified with the `trace_folder` option.
 To minimize performance impact, save files to volatile storage.
 
+#### Syslog Tracing
+Trace messages can be sent to syslog when the `trace_to_syslog` option is enabled.
+The syslog ident is set to the configured `instance_name`.
+
+On systemd, logs can be viewed with the following command:
+```
+journalctl -t cpcd_0 -f
+```
+
 #### Log Rotation
 When an issue takes a longer time to reproduce, trace files might occupy excessive space on the target.
 To manage this, the [logrotate](https://linux.die.net/man/8/logrotate) tool can be utilized to consolidate logs.

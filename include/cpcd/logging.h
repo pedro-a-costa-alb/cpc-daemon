@@ -50,6 +50,8 @@ void logging_init(void);
 
 void init_file_logging(void);
 
+void init_syslog_logging(void);
+
 void init_stats_logging(void);
 
 void logging_kill(void);
@@ -57,6 +59,8 @@ void logging_kill(void);
 void trace(bool timestamp, const char* string, ...) __attribute__((format(printf, 2, 3)));
 
 void trace_frame(const char* string, const void* buffer, size_t len);
+
+void syslog_log(cpc_trace_level_t level, const char *string, ...) __attribute__((format(printf, 2, 3)));
 
 void logging_driver_print_stats(void);
 
@@ -75,18 +79,27 @@ extern core_debug_counters_t secondary_core_debug_counters;
 
 #define TRACE_LEVEL_ENABLED(level) (config.trace_level >= (level))
 
-#define TRACE_WITH_LEVEL(level, string, ...) \
-  do {                                       \
-    if (TRACE_LEVEL_ENABLED(level)) {        \
-      LTTNG_TRACE(string, ##__VA_ARGS__);    \
-      trace(true, string, ##__VA_ARGS__);    \
-    }                                        \
+#define SYSLOG_LOG(level, string, ...)          \
+  do {                                          \
+    if (config.syslog_tracing) {                \
+      syslog_log(level, string, ##__VA_ARGS__); \
+    }                                           \
+  } while (0)
+
+#define TRACE_WITH_LEVEL(level, string, ...)    \
+  do {                                          \
+    if (TRACE_LEVEL_ENABLED(level)) {           \
+      LTTNG_TRACE(string, ##__VA_ARGS__);       \
+      SYSLOG_LOG(level, string, ##__VA_ARGS__); \
+      trace(true, string, ##__VA_ARGS__);       \
+    }                                           \
   } while (0)
 
 #define TRACE_WITH_LEVEL_NO_TIMESTAMP(level, string, ...) \
   do {                                                    \
     if (TRACE_LEVEL_ENABLED(level)) {                     \
       LTTNG_TRACE(string, ##__VA_ARGS__);                 \
+      SYSLOG_LOG(level, string, ##__VA_ARGS__);           \
       trace(false, string, ##__VA_ARGS__);                \
     }                                                     \
   } while (0)

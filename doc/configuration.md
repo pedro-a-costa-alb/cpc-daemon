@@ -121,6 +121,13 @@ pointed by `traces_folder`.
 
     trace_to_file: false
 
+### Trace to Syslog
+
+Optional boolean to send trace messages to syslog. The syslog ident is set to the configured
+`instance_name`. On systemd, logs can be viewed with: `journalctl -t <instance_name>`.
+
+    trace_to_syslog: false
+
 ### Traces Folder
 
 Optional if `trace_to_file` is enabled. The folder where time-stamped trace files

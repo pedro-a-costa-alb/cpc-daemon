@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <assert.h>
 #include <time.h>
+#include <syslog.h>
 #include <sys/statfs.h>
 #include <sys/timerfd.h>
 #include <linux/magic.h>
@@ -392,6 +393,27 @@ static void file_log(void* data, size_t length)
   async_logger_write(&file_logger, data, length);
 }
 
+static int cpc_level_to_syslog(cpc_trace_level_t level)
+{
+  switch (level) {
+    case CPC_TRACE_LEVEL_ERROR: return LOG_ERR;
+    case CPC_TRACE_LEVEL_WARN:  return LOG_WARNING;
+    case CPC_TRACE_LEVEL_INFO:  return LOG_INFO;
+    case CPC_TRACE_LEVEL_DEBUG: return LOG_DEBUG;
+    case CPC_TRACE_LEVEL_FRAME: return LOG_DEBUG;
+    default:                    return LOG_NOTICE;
+  }
+}
+
+void syslog_log(cpc_trace_level_t level, const char *string, ...)
+{
+  va_list vl;
+
+  va_start(vl, string);
+  vsyslog(cpc_level_to_syslog(level), string, vl);
+  va_end(vl);
+}
+
 void logging_init(void)
 {
   // Completely initialize stdout logging no matter what, because we still print some
@@ -520,6 +542,11 @@ void init_file_logging(void)
   file_logging_init();
 }
 
+void init_syslog_logging(void)
+{
+  openlog(config.instance_name, LOG_PID | LOG_NDELAY, LOG_DAEMON);
+}
+
 void logging_kill(void)
 {
   // Note we don't cancel the threads, we let them finish
@@ -536,6 +563,10 @@ void logging_kill(void)
     pthread_cond_signal(&file_logger.condition);
     pthread_join(file_logger_thread, NULL);
     file_logger_thread_started = false;
+  }
+
+  if (config.syslog_tracing) {
+    closelog();
   }
 
   free(logging_private_data);
@@ -638,6 +669,8 @@ void trace_frame(const char* string, const void* buffer, size_t len)
 {
   char log_string[LOGGING_BUF_SIZE];
   size_t log_string_length = 0;
+  char syslog_string[LOGGING_BUF_SIZE];
+  size_t syslog_string_length = 0;
   uint8_t* frame = (uint8_t*) buffer;
   int errno_backup = errno;
 
@@ -659,6 +692,10 @@ void trace_frame(const char* string, const void* buffer, size_t len)
     }
 
     log_string[log_string_length++] = string[i];
+
+    if (config.syslog_tracing && syslog_string_length < sizeof(syslog_string) - 1) {
+      syslog_string[syslog_string_length++] = string[i];
+    }
   }
 
   // Append hex data
@@ -680,6 +717,12 @@ void trace_frame(const char* string, const void* buffer, size_t len)
     log_string_length += 2;
 
     log_string[log_string_length++] = ':';
+
+    if (config.syslog_tracing && syslog_string_length < sizeof(syslog_string) - sizeof("xx:")) {
+      byte_to_hex(frame[i], syslog_string + syslog_string_length);
+      syslog_string_length += 2;
+      syslog_string[syslog_string_length++] = ':';
+    }
   }
 
   // Newline terminate the string (overriding the last semicolon)
@@ -690,6 +733,11 @@ void trace_frame(const char* string, const void* buffer, size_t len)
     if (config.file_tracing) {
       file_log(log_string, log_string_length);
     }
+  }
+
+  if (config.syslog_tracing && syslog_string_length) {
+    syslog_string[syslog_string_length - 1] = '\0';
+    syslog(LOG_DEBUG, "%s", syslog_string);
   }
 
   errno = errno_backup;
